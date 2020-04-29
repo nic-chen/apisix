@@ -202,8 +202,8 @@ local function sync_data(self)
     end
 
     local dir_res, err = waitdir(self.etcd_cli, self.key, self.prev_index + 1)
-    log.info("waitdir key: ", self.key, " prev_index: ", self.prev_index + 1)
-    log.info("res: ", json.delay_encode(dir_res, true))
+    -- log.info("waitdir key: ", self.key, " prev_index: ", self.prev_index + 1)
+    -- log.info("res: ", json.delay_encode(dir_res, true))
     if not dir_res then
         return false, err
     end
@@ -347,8 +347,8 @@ local function _automatic_fetch(premature, self)
         elseif not ok2 and err then
             if err ~= "timeout" and err ~= "Key not found"
                and self.last_err ~= err then
-                log.error("failed to fetch data from etcd: ", err, ", ",
-                          tostring(self))
+                --log.error("failed to fetch data from etcd: ", err, ", ",
+                          --tostring(self))
             end
 
             if err ~= self.last_err then
@@ -380,7 +380,8 @@ function _M.new(key, opts)
 
     local etcd_conf = clone_tab(local_conf.etcd)
     local prefix = etcd_conf.prefix
-    etcd_conf.http_host = etcd_conf.host
+    local etcd_host = os.getenv("APISIX_ETCD_HOST")
+    etcd_conf.http_host = etcd_host and etcd_host or etcd_conf.host
     etcd_conf.host = nil
     etcd_conf.prefix = nil
 

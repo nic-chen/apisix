@@ -29,7 +29,8 @@ local function new()
 
     local etcd_conf = clone_tab(local_conf.etcd)
     local prefix = etcd_conf.prefix
-    etcd_conf.http_host = etcd_conf.host
+    local etcd_host = os.getenv("APISIX_ETCD_HOST")
+    etcd_conf.http_host = etcd_host and etcd_host or etcd_conf.host    
     etcd_conf.host = nil
     etcd_conf.prefix = nil
 
