@@ -283,6 +283,7 @@ local uri_route = {
 function _M.init_worker()
     local local_conf = core.config.local_conf()
     if not local_conf.apisix or not local_conf.apisix.enable_admin then
+        core.log.error("enable_admin false")
         return
     end
 
