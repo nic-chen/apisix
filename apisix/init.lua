@@ -79,6 +79,8 @@ function _M.http_init_worker()
     load_balancer = require("apisix.balancer").run
     require("apisix.admin.init").init_worker()
 
+    core.log.error('http_init_worker init worker')
+
     router.http_init_worker()
     require("apisix.http.service").init_worker()
     plugin.init_worker()
