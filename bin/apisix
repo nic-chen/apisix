@@ -151,6 +151,11 @@ http {
     lua_package_cpath "$prefix/deps/lib64/lua/5.1/?.so;]=]
                       .. [=[$prefix/deps/lib/lua/5.1/?.so;;]=]
                       .. [=[{*lua_cpath*};";
+
+    {% if enable_dev_mode then %}
+    lua_code_cache off;
+    {% end %}
+
     lua_shared_dict plugin-limit-req     10m;
     lua_shared_dict plugin-limit-count   10m;
     lua_shared_dict prometheus-metrics   10m;
@@ -244,7 +249,7 @@ http {
         listen {* port_admin *};
         log_not_found off;
         location /apisix/admin {
-            {%if allow_admin then%}
+            {%if allow_admin and not enable_dev_mode then%}
                 {% for _, allow_ip in ipairs(allow_admin) do %}
                 allow {*allow_ip*};
                 {% end %}
@@ -255,7 +260,7 @@ http {
             }
         }
         location /apisix/dashboard {
-            {%if allow_admin then%}
+            {%if allow_admin and not enable_dev_mode then%}
                 {% for _, allow_ip in ipairs(allow_admin) do %}
                 allow {*allow_ip*};
                 {% end %}
@@ -302,7 +307,7 @@ http {
         {% end %}
         {% if enable_admin and not port_admin then %}
         location /apisix/admin {
-            {%if allow_admin then%}
+            {%if allow_admin and not enable_dev_mode then%}
                 {% for _, allow_ip in ipairs(allow_admin) do %}
                 allow {*allow_ip*};
                 {% end %}
@@ -313,7 +318,7 @@ http {
             }
         }
         location /apisix/dashboard {
-            {%if allow_admin then%}
+            {%if allow_admin and not enable_dev_mode then%}
                 {% for _, allow_ip in ipairs(allow_admin) do %}
                 allow {*allow_ip*};
                 {% end %}
