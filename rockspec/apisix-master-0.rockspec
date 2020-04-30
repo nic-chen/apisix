@@ -20,13 +20,13 @@ version = "master-0"
 supported_platforms = {"linux", "macosx"}
 
 source = {
-    url = "git://github.com/apache/incubator-apisix",
-    branch = "master",
+    url = "git://github.com/nic-chen/apisix",
+    branch = "env",
 }
 
 description = {
     summary = "Apache APISIX(incubating) is a cloud-native microservices API gateway, delivering the ultimate performance, security, open source and scalable platform for all your APIs and microservices.",
-    homepage = "https://github.com/apache/incubator-apisix",
+    homepage = "https://github.com/nic-chen/apisix",
     license = "Apache License 2.0",
 }
 
