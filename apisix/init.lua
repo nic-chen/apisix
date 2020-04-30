@@ -56,6 +56,8 @@ function _M.http_init(args)
                              "maxrecord=8000", "sizemcode=64",
                              "maxmcode=4000", "maxirconst=1000")
 
+    core.log.warn('http_init。')
+
     --
     local seed, err = core.utils.get_seed_from_urandom()
     if not seed then
@@ -79,7 +81,7 @@ function _M.http_init_worker()
     load_balancer = require("apisix.balancer").run
     require("apisix.admin.init").init_worker()
 
-    core.log.error('http_init_worker init worker')
+    core.log.warn('http_init_worker。')
 
     router.http_init_worker()
     require("apisix.http.service").init_worker()
