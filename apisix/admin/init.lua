@@ -293,6 +293,8 @@ function _M.init_worker()
     router = route.new(uri_route)
     events = require("resty.worker.events")
 
+    core.log.error("admin init router:", router)
+
     events.register(reload_plugins, reload_event, "PUT")
 end
 
