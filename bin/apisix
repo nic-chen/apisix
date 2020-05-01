@@ -684,8 +684,10 @@ local function init_etcd(show_output)
 
     local timeout = etcd_conf.timeout or 3
     local uri
+    
     local etcd_host = os.getenv("APISIX_ETCD_HOST")
     yaml_conf.etcd.host = etcd_host and etcd_host or yaml_conf.etcd.host
+
     --convert old single etcd config to multiple etcd config
     if type(yaml_conf.etcd.host) == "string" then
         yaml_conf.etcd.host = {yaml_conf.etcd.host}
@@ -767,6 +769,11 @@ end
 function _M.version()
     local ver = require("apisix.core.version")
     print(ver['VERSION'])
+end
+
+function _M.etcdhost()    
+    local etcd_host = os.getenv("APISIX_ETCD_HOST")
+    print(etcd_host)
 end
 
 local cmd_action = arg[1]
