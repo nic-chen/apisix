@@ -15,9 +15,10 @@
 -- limitations under the License.
 --
 local fetch_local_conf = require("apisix.core.config_local").local_conf
-local etcd = require("resty.etcd")
-local clone_tab = require("table.clone")
-local core = require("apisix.core")
+local etcd             = require("resty.etcd")
+local clone_tab        = require("table.clone")
+local log              = require("apisix.core.log")
+local json             = require("apisix.core.json")
 
 local _M = {version = 0.1}
 
@@ -35,7 +36,7 @@ local function new()
     etcd_conf.host = nil
     etcd_conf.prefix = nil
 
-    core.log.error("etcd conf: ", core.json.delay_encode(etcd_conf))
+    log.error("etcd conf: ", json.delay_encode(etcd_conf))
 
     local etcd_cli
     etcd_cli, err = etcd.new(etcd_conf)
