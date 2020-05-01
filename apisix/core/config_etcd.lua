@@ -34,6 +34,7 @@ local tostring     = tostring
 local tonumber     = tonumber
 local pcall        = pcall
 local created_obj  = {}
+local core         = require("apisix.core")
 
 
 local _M = {
