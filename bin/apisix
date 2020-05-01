@@ -92,6 +92,9 @@ worker_cpu_affinity auto;
 error_log {* error_log *} {* error_log_level or "error" *};
 pid logs/nginx.pid;
 worker_rlimit_nofile {* worker_rlimit_nofile *};
+
+env APISIX_ETCD_HOST;
+
 events {
     accept_mutex off;
     worker_connections {* event.worker_connections *};
