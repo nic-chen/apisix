@@ -17,6 +17,7 @@
 local fetch_local_conf = require("apisix.core.config_local").local_conf
 local etcd = require("resty.etcd")
 local clone_tab = require("table.clone")
+local core = require("apisix.core")
 
 local _M = {version = 0.1}
 
@@ -33,6 +34,8 @@ local function new()
     etcd_conf.http_host = etcd_host and etcd_host or etcd_conf.host    
     etcd_conf.host = nil
     etcd_conf.prefix = nil
+
+    core.log.error("etcd conf: ", core.json.delay_encode(etcd_conf))
 
     local etcd_cli
     etcd_cli, err = etcd.new(etcd_conf)

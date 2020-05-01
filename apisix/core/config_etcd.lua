@@ -386,6 +386,8 @@ function _M.new(key, opts)
     etcd_conf.host = nil
     etcd_conf.prefix = nil
 
+    core.log.error("config_etcd conf: ", core.json.delay_encode(etcd_conf))
+
     local etcd_cli
     etcd_cli, err = etcd.new(etcd_conf)
     if not etcd_cli then
