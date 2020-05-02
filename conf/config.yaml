@@ -50,8 +50,8 @@ apisix:
   #    disk_path: "/tmp/disk_cache_two"
   #    cache_levels: "1:2"
 
-  allow_admin:                  # http://nginx.org/en/docs/http/ngx_http_access_module.html#allow
-    - 127.0.0.0/24              # If we don't set any IP list, then any IP access is allowed by default.
+  #allow_admin:                  # http://nginx.org/en/docs/http/ngx_http_access_module.html#allow
+  #  - 127.0.0.0/24              # If we don't set any IP list, then any IP access is allowed by default.
   #   - "::/64"
   # port_admin: 9180              # use a separate port
 
@@ -114,7 +114,7 @@ nginx_config:                     # config for render the template to genarate n
 
 etcd:
   host:                           # it's possible to define multiple etcd hosts addresses of the same etcd cluster.
-    - "http://172.17.0.5:2379"     # multiple etcd address
+    - "http://etcd:2379"     # multiple etcd address
   prefix: "/apisix"               # apisix configurations prefix
   timeout: 3                      # 3 seconds
 
