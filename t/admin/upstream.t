@@ -1278,3 +1278,31 @@ GET /t
 passed
 --- no_error_log
 [error]
+
+
+
+=== TEST 39: set upstream(id: 2 + duplicate name)
+--- config
+    location /t {
+        content_by_lua_block {
+            local t = require("lib.test_admin").test
+            local code, body = t('/apisix/admin/upstreams/2',
+                 ngx.HTTP_PUT,
+                 [[{
+                    "nodes": {
+                        "127.0.0.1:8080": 1
+                    },
+                    "type": "roundrobin",
+                    "name": "test upstream name"
+                }]]
+                )
+
+            ngx.status = code
+            ngx.print(body)
+        }
+    }
+--- request
+GET /t
+--- error_code: 400
+--- no_error_log
+[error]

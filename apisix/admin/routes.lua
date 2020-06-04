@@ -134,6 +134,9 @@ function _M.put(id, conf, sub_path, args)
     end
 
     local routes, routes_ver = get_routes()
+
+    core.log.error("compare routes: ", tostring(routes))
+
     if routes_ver and routes then
         for _, route in ipairs(routes) do
             if type(route) == "table" and route.value

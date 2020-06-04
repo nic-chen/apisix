@@ -14,7 +14,7 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 --
-local healthcheck = require("resty.healthcheck")
+local healthcheck
 local roundrobin  = require("resty.roundrobin")
 local discovery   = require("apisix.discovery.init").discovery
 local resty_chash = require("resty.chash")
@@ -82,6 +82,10 @@ end
 
 
 local function create_checker(upstream, healthcheck_parent)
+    if healthcheck == nil then
+        healthcheck = require("resty.healthcheck")
+    end
+
     local checker = healthcheck.new({
         name = "upstream#" .. healthcheck_parent.key,
         shm_name = "upstream-healthcheck",

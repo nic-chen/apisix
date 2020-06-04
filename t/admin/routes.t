@@ -1772,3 +1772,35 @@ GET /t
 passed
 --- no_error_log
 [error]
+
+
+
+=== TEST 48: set route(id: 2 + duplicate name)
+--- config
+    location /t {
+        content_by_lua_block {
+            local t = require("lib.test_admin").test
+            local code, body = t('/apisix/admin/routes/2',
+                ngx.HTTP_PUT,
+                [[{
+                    "methods": ["GET"],
+                    "upstream": {
+                        "nodes": {
+                            "127.0.0.1:8080": 1
+                        },
+                        "type": "roundrobin"
+                    },
+                    "name": "test name",
+                    "uri": "/index.html"
+                }]]
+                )
+
+            ngx.status = code
+            ngx.say(body)
+        }
+    }
+--- request
+GET /t
+--- error_code: 400
+--- no_error_log
+[error]

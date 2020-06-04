@@ -17,6 +17,7 @@
 local core = require("apisix.core")
 local get_routes = require("apisix.router").http_routes
 local get_services = require("apisix.http.service").services
+local get_upstreams = require("apisix.balancer").upstreams
 local tostring = tostring
 local ipairs = ipairs
 local type = type
@@ -122,6 +123,28 @@ function _M.put(id, conf)
         return 400, err
     end
 
+    local upstreams, upstreams_ver = get_upstreams()
+
+    core.log.error("compare upstreams: ", tostring(upstreams))
+
+
+    if upstreams_ver and upstreams then
+        
+        core.log.error("compare upstream: ", tostring(upstream.value.id), id, ' :name: ', upstream.value.name, conf.name)
+
+        for _, upstream in ipairs(upstreams) do
+            if type(upstream) == "table" and upstream.value
+               and upstream.value.id
+               and upstream.value.name
+               and tostring(upstream.value.id) ~= id 
+               and upstream.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " upstream [" .. upstream.value.id
+                                         .. "]"}
+            end
+        end
+    end
+
     local key = "/upstreams/" .. id
     core.log.info("key: ", key)
     local res, err = core.etcd.set(key, conf)
@@ -154,6 +177,19 @@ function _M.post(id, conf)
     local id, err = check_conf(id, conf, false)
     if not id then
         return 400, err
+    end
+
+    local upstreams, upstreams_ver = get_upstreams()
+    if upstreams_ver and upstreams then
+        for _, upstream in ipairs(upstreams) do
+            if type(upstream) == "table" and upstream.value
+               and upstream.value.name
+               and upstream.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " upstream [" .. upstream.value.id
+                                         .. "]"}
+            end
+        end
     end
 
     local key = "/upstreams"
