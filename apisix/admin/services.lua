@@ -16,6 +16,7 @@
 --
 local core = require("apisix.core")
 local get_routes = require("apisix.router").http_routes
+local get_services = require("apisix.http.service").services
 local schema_plugin = require("apisix.admin.plugins").check_schema
 local upstreams = require("apisix.admin.upstreams")
 local tostring = tostring
@@ -101,6 +102,21 @@ function _M.put(id, conf)
         return 400, err
     end
 
+    local services, services_ver = get_services()
+    if services_ver and services then
+        for _, service in ipairs(services) do
+            if type(service) == "table" and service.value
+               and service.value.id
+               and service.value.name
+               and tostring(service.value.id) ~= id 
+               and service.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " service [" .. service.value.id
+                                         .. "]"}
+            end
+        end
+    end
+
     local key = "/services/" .. id
     core.log.info("key: ", key)
     local res, err = core.etcd.set(key, conf)
@@ -133,6 +149,19 @@ function _M.post(id, conf)
     local id, err = check_conf(id, conf, false)
     if not id then
         return 400, err
+    end
+
+    local services, services_ver = get_services()
+    if services_ver and services then
+        for _, service in ipairs(services) do
+            if type(service) == "table" and service.value
+               and service.value.name
+               and service.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " service [" .. service.value.id
+                                         .. "]"}
+            end
+        end
     end
 
     local key = "/services"

@@ -378,5 +378,12 @@ function _M.init_worker()
     end
 end
 
+function _M.upstreams()
+    if not upstreams_etcd then
+        return nil, nil
+    end
+
+    return upstreams_etcd.values, upstreams_etcd.conf_version
+end
 
 return _M

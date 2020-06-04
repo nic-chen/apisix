@@ -20,6 +20,7 @@ local upstreams = require("apisix.admin.upstreams")
 local tostring = tostring
 local type = type
 local loadstring = loadstring
+local get_routes = require("apisix.router").http_routes
 
 
 local _M = {
@@ -132,6 +133,21 @@ function _M.put(id, conf, sub_path, args)
         return 400, err
     end
 
+    local routes, routes_ver = get_routes()
+    if routes_ver and routes then
+        for _, route in ipairs(routes) do
+            if type(route) == "table" and route.value
+               and route.value.id
+               and route.value.name
+               and tostring(route.value.id) ~= id 
+               and route.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " route [" .. route.value.id
+                                         .. "]"}
+            end
+        end
+    end
+
     local key = "/routes/" .. id
     local res, err = core.etcd.set(key, conf, args.ttl)
     if not res then
@@ -163,6 +179,19 @@ function _M.post(id, conf, sub_path, args)
     local id, err = check_conf(id, conf, false)
     if not id then
         return 400, err
+    end
+
+    local routes, routes_ver = get_routes()
+    if routes_ver and routes then
+        for _, route in ipairs(routes) do
+            if type(route) == "table" and route.value
+               and route.value.name
+               and route.value.name == conf.name then
+                return 400, {error_msg = "duplicate name with "
+                                         .. " route [" .. route.value.id
+                                         .. "]"}
+            end
+        end
     end
 
     local key = "/routes"
