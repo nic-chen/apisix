@@ -18,7 +18,7 @@ local schema    = require('apisix.core.schema')
 local setmetatable = setmetatable
 local error     = error
 
-local _M = {version = 0.4}
+local _M = {version = 0.5}
 
 
 local plugins_schema = {
@@ -225,11 +225,9 @@ local health_checker = {
 }
 
 
-local upstream_schema = {
-    type = "object",
-    properties = {
-        nodes = {
-            description = "nodes of upstream",
+local nodes_schema = {
+    anyOf = {
+        {
             type = "object",
             patternProperties = {
                 [".*"] = {
@@ -240,6 +238,39 @@ local upstream_schema = {
             },
             minProperties = 1,
         },
+        {
+            type = "array",
+            minItems = 1,
+            items = {
+                type = "object",
+                properties = {
+                    host = host_def,
+                    port = {
+                        description = "port of node",
+                        type = "integer",
+                        minimum = 1,
+                    },
+                    weight = {
+                        description = "weight of node",
+                        type = "integer",
+                        minimum = 0,
+                    },
+                    metadata = {
+                        description = "metadata of node",
+                        type = "object",
+                    }
+                },
+                required = {"host", "port", "weight"},
+            },
+        }
+    }
+}
+
+
+local upstream_schema = {
+    type = "object",
+    properties = {
+        nodes = nodes_schema,
         retries = {
             type = "integer",
             minimum = 1,
@@ -296,12 +327,15 @@ local upstream_schema = {
             description = "enable websocket for request",
             type        = "boolean"
         },
+        name = {type = "string", maxLength = 50},
         desc = {type = "string", maxLength = 256},
+        service_name = {type = "string", maxLength = 50},
         id = id_schema
     },
     anyOf = {
         {required = {"type", "nodes"}},
         {required = {"type", "k8s_deployment_info"}},
+        {required = {"type", "service_name"}},
     },
     additionalProperties = false,
 }
@@ -336,6 +370,7 @@ _M.route = {
             },
             uniqueItems = true,
         },
+        name = {type = "string", maxLength = 50},
         desc = {type = "string", maxLength = 256},
         priority = {type = "integer", default = 0},
 
@@ -413,6 +448,7 @@ _M.service = {
         plugins = plugins_schema,
         upstream = upstream_schema,
         upstream_id = id_schema,
+        name = {type = "string", maxLength = 50},
         desc = {type = "string", maxLength = 256},
     },
     anyOf = {
@@ -445,6 +481,7 @@ _M.upstream = upstream_schema
 _M.ssl = {
     type = "object",
     properties = {
+        id = id_schema,
         cert = {
             type = "string", minLength = 128, maxLength = 64*1024
         },
@@ -454,11 +491,32 @@ _M.ssl = {
         sni = {
             type = "string",
             pattern = [[^\*?[0-9a-zA-Z-.]+$]],
+        },
+        snis = {
+            type = "array",
+            items = {
+                type = "string",
+                pattern = [[^\*?[0-9a-zA-Z-.]+$]],
+            }
+        },
+        exptime = {
+            type = "integer",
+            minimum = 1588262400,  -- 2020/5/1 0:0:0
+        },
+        status = {
+            description = "ssl status, 1 to enable, 0 to disable",
+            type = "integer",
+            enum = {1, 0},
+            default = 1
         }
     },
-    required = {"sni", "key", "cert"},
+    oneOf = {
+        {required = {"sni", "key", "cert"}},
+        {required = {"snis", "key", "cert"}}
+    },
     additionalProperties = false,
 }
+
 
 
 _M.proto = {
@@ -476,6 +534,7 @@ _M.proto = {
 _M.global_rule = {
     type = "object",
     properties = {
+        id = id_schema,
         plugins = plugins_schema
     },
     required = {"plugins"},
@@ -486,6 +545,7 @@ _M.global_rule = {
 _M.stream_route = {
     type = "object",
     properties = {
+        id = id_schema,
         remote_addr = remote_addr_def,
         server_addr = {
             description = "server IP",

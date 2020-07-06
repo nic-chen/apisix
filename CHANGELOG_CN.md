@@ -19,6 +19,8 @@
 
 # Table of Contents
 
+- [1.4.0](#140)
+- [1.3.0](#130)
 - [1.2.0](#120)
 - [1.1.0](#110)
 - [1.0.0](#100)
@@ -26,6 +28,36 @@
 - [0.8.0](#080)
 - [0.7.0](#070)
 - [0.6.0](#060)
+
+## 1.4.0
+
+### Core
+- Admin API: 路由支持唯一 name 字段 [1655](https://github.com/apache/incubator-apisix/pull/1655)
+- 优化 log 缓冲区大小和刷新时间 [1570](https://github.com/apache/incubator-apisix/pull/1570)
+
+### New plugins
+- :sunrise: **Apache Skywalking plugin** [1241](https://github.com/apache/incubator-apisix/pull/1241)
+- :sunrise: **Keycloak Identity Server Plugin** [1701](https://github.com/apache/incubator-apisix/pull/1701)
+- :sunrise: **Echo Plugin** [1632](https://github.com/apache/incubator-apisix/pull/1632)
+- :sunrise: **Consume Restriction Plugin** [1437](https://github.com/apache/incubator-apisix/pull/1437)
+
+### Improvements
+- Batch Request : 对每个请求拷贝头 [1697](https://github.com/apache/incubator-apisix/pull/1697)
+- SSL 私钥加密 [1678](https://github.com/apache/incubator-apisix/pull/1678)
+- 众多插件文档改善
+
+## 1.3.0
+
+1.3 版本主要带来安全更新。
+
+## Security
+- 拒绝无效的 header [#1462](https://github.com/apache/incubator-apisix/pull/1462) 并对 uri 进行安全编码 [#1461](https://github.com/apache/incubator-apisix/pull/1461)
+- 默认只允许本地环回地址 127.0.0.1 访问 admin API 和 dashboard. [#1458](https://github.com/apache/incubator-apisix/pull/1458)
+
+### Plugin
+- :sunrise: **新增 batch request 插件**. [#1388](https://github.com/apache/incubator-apisix/pull/1388)
+- 实现完成 `sys logger` 插件. [#1414](https://github.com/apache/incubator-apisix/pull/1414)
+
 
 ## 1.2.0
 1.2 版本在内核以及插件上带来了非常多的更新。

@@ -40,7 +40,8 @@ __DATA__
                     },
                     "headers": {
                         "Base-Header": "base",
-                        "Conflict-Header": "header_value"
+                        "ConflictHeader": "header_value",
+                        "OuterConflict": "common_value"
                     },
                     "pipeline":[
                     {
@@ -48,7 +49,7 @@ __DATA__
                         "headers": {
                             "Header1": "hello",
                             "Header2": "world",
-                            "Conflict-Header": "b-header-value"
+                            "ConflictHeader": "b-header-value"
                         }
                     },{
                         "path": "/c",
@@ -71,7 +72,8 @@ __DATA__
                         "X-Res": "B",
                         "X-Header1": "hello",
                         "X-Header2": "world",
-                        "X-Conflict-Header": "b-header-value"
+                        "X-Conflict-Header": "b-header-value",
+                        "X-OuterConflict": "common_value"
                     }
                 },
                 {
@@ -95,8 +97,11 @@ __DATA__
                         "X-Query-Conflict": "d_value"
                     }
                 }
-                ]]=]
-                )
+                ]]=],
+                {
+                    ConflictHeader = "outer_header",
+                    OuterConflict = "outer_confliect"
+                })
 
             ngx.status = code
             ngx.say(body)
@@ -110,7 +115,8 @@ __DATA__
             ngx.header["Base-Query"] = ngx.var.arg_base
             ngx.header["X-Header1"] = ngx.req.get_headers()["Header1"]
             ngx.header["X-Header2"] = ngx.req.get_headers()["Header2"]
-            ngx.header["X-Conflict-Header"] = ngx.req.get_headers()["Conflict-Header"]
+            ngx.header["X-Conflict-Header"] = ngx.req.get_headers()["ConflictHeader"]
+            ngx.header["X-OuterConflict"] = ngx.req.get_headers()["OuterConflict"]
             ngx.header["X-Res"] = "B"
             ngx.print("B")
         }
@@ -676,6 +682,94 @@ GET /aggregate
     location = /d {
         content_by_lua_block {
             ngx.status = 202
+        }
+    }
+--- request
+GET /aggregate
+--- response_body
+passed
+--- no_error_log
+[error]
+
+
+
+=== TEST 15: copy all header to every request except Contenct-
+--- config
+    client_body_in_file_only on;
+    location = /aggregate {
+        content_by_lua_block {
+            local core = require("apisix.core")
+            local t = require("lib.test_admin").test
+            local code, body = t('/apisix/batch-requests',
+                ngx.HTTP_POST,
+                [=[{
+                    "timeout": 1000,
+                    "pipeline":[
+                    {
+                        "path": "/b",
+                        "headers": {
+                            "Header1": "hello",
+                            "Header2": "world"
+                        }
+                    },{
+                        "path": "/c",
+                        "method": "PUT"
+                    },{
+                        "path": "/d"
+                    }]
+                }]=],
+                [=[[
+                    {
+                        "status": 200,
+                        "headers": {
+                            "X-Cookie": "request-cookies-b",
+                            "X-HeaderB": "request-header-b"
+                        }
+                    },
+                    {
+                        "status": 201,
+                        "headers": {
+                            "X-Cookie": "request-cookies-c",
+                            "X-HeaderC": "request-header-c"
+                        }
+                    },
+                    {
+                        "status": 202,
+                        "headers": {
+                            "X-Cookie": "request-cookies-d",
+                            "X-HeaderD": "request-header-d"
+                        }
+                    }
+                ]]=],
+                {
+                    Cookie = "request-cookies",
+                    OuterHeader = "request-header"
+                })
+
+            ngx.status = code
+            ngx.say(body)
+        }
+    }
+
+    location = /b {
+        content_by_lua_block {
+            ngx.status = 200
+            ngx.header["X-Cookie"] = ngx.req.get_headers()["Cookie"] .. "-b"
+            ngx.header["X-HeaderB"] = ngx.req.get_headers()["OuterHeader"] .. "-b"
+        }
+    }
+    location = /c {
+        content_by_lua_block {
+            ngx.status = 201
+            ngx.header["X-Cookie"] = ngx.req.get_headers()["Cookie"] .. "-c"
+            ngx.header["X-HeaderC"] = ngx.req.get_headers()["OuterHeader"] .. "-c"
+        }
+    }
+    location = /d {
+        content_by_lua_block {
+            ngx.status = 202
+            ngx.header["X-Cookie"] = ngx.req.get_headers()["Cookie"] .. "-d"
+            ngx.header["X-HeaderD"] = ngx.req.get_headers()["OuterHeader"] .. "-d"
         }
     }
 --- request

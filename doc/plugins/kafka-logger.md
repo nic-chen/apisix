@@ -32,6 +32,11 @@
 
 This will provide the ability to send Log data requests as JSON objects to external Kafka clusters.
 
+This plugin provides the ability to push Log data as a batch to you're external Kafka topics. In case if you did not recieve the log data don't worry give it some time it will automatically send the logs after the timer function expires in our Batch Processor.
+
+For more info on Batch-Processor in Apache APISIX please refer.
+[Batch-Processor](../batch-processor.md)
+
 ## Attributes
 
 |Name           |Requirement    |Description|
@@ -39,7 +44,6 @@ This will provide the ability to send Log data requests as JSON objects to exter
 | broker_list   |required       | An array of Kafka brokers.|
 | kafka_topic   |required       | Target topic to push data.|
 | timeout       |optional       |Timeout for the upstream to send data.|
-| async         |optional       |Boolean value to control whether to perform async push.|
 | key           |required       |Key for the message.|
 |name           |optional       |A unique identifier to identity the batch processor|
 |batch_max_size |optional       |Max size of each batch, default is 1000|
@@ -50,21 +54,12 @@ This will provide the ability to send Log data requests as JSON objects to exter
 
 ## Info
 
-Difference between async and the sync data push.
+The `message` will write to the buffer first.
+It will send to the kafka server when the buffer exceed the `batch_max_size`,
+or every `buffer_duration` flush the buffer.
 
-1. In sync model
-
-    In case of success, returns the offset (** cdata: LL **) of the current broker and partition.
-    In case of errors, returns `nil` with a string describing the error.
-
-2. In async model
-
-    The `message` will write to the buffer first.
-    It will send to the kafka server when the buffer exceed the `batch_num`,
-    or every `flush_time` flush the buffer.
-
-    In case of success, returns `true`.
-    In case of errors, returns `nil` with a string describing the error (`buffer overflow`).
+In case of success, returns `true`.
+In case of errors, returns `nil` with a string describing the error (`buffer overflow`).
 
 ##### Sample broker list
 
@@ -124,7 +119,7 @@ Remove the corresponding json configuration in the plugin configuration to disab
 APISIX plugins are hot-reloaded, therefore no need to restart APISIX.
 
 ```shell
-$ curl http://127.0.0.1:2379/apisix/admin/routes/1 -X PUT -d value='
+$ curl http://127.0.0.1:2379/apisix/admin/routes/1  -H 'X-API-KEY: edd1c9f034335f136f87ad84b625c8f1' -X PUT -d value='
 {
     "methods": ["GET"],
     "uri": "/hello",
