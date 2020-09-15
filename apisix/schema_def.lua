@@ -558,7 +558,6 @@ _M.ssl = {
 }
 
 
-
 _M.proto = {
     type = "object",
     properties = {
@@ -600,6 +599,13 @@ _M.stream_route = {
         upstream_id = id_schema,
         plugins = plugins_schema,
     }
+}
+
+
+_M.metadata = {
+    type = "string",
+    minLength = 1,
+    maxLength = 2048
 }
 
 
