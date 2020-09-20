@@ -20,8 +20,8 @@ version = "1.5-0"
 supported_platforms = {"linux", "macosx"}
 
 source = {
-    url = "git://github.com/apache/apisix",
-    tag = "1.5",
+    url = "git://github.com/nic-chen/apisix",
+    branch = "1.5",
 }
 
 description = {
