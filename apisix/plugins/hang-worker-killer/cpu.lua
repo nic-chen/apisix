@@ -1,13 +1,16 @@
-local io_open   = io.open
-local ngx_re    = require "ngx.re"
+local io_open  = io.open
+local ngx_re   = require "ngx.re"
+local str_find = string.find
+local tonumber = tonumber
+local core             = require("apisix.core")
 
 
 local _M = {version = 0.1}
 
 
 local function split_proc_stat(content)
-    local name_start = string.find(content, '(')
-	local name_end = string.find(content, ')')
+    local name_start = str_find(content, '(', 1, true)
+	local name_end = str_find(content, ')', 1, true)
     if name_start < 3 then
         return nil, "invalid proc stat file content"
     end
@@ -15,7 +18,7 @@ local function split_proc_stat(content)
     local name = string.sub(content, name_start + 1, name_end)
     local pid = string.sub(content, 0, name_start - 1)
     local rest_content = string.sub(content, name_end)
-	local rest_fields = ngx_re.split(rest_content, [[\s*]], "jo")
+	local rest_fields = ngx_re.split(rest_content, [[\s+]], "jo")
 
     local res = {}
     res[1] = pid
@@ -47,8 +50,8 @@ local function worker_cpu_times(pid)
         return 0, "invalid proc stat file(" .. filepath .. ") content"
     end
 
-    local utime = res[14]
-    local stime = res[15]
+    local utime = tonumber(res[14])
+    local stime = tonumber(res[15])
 
     return utime + stime
 end
@@ -65,11 +68,12 @@ local function cpu_times()
     local cpu_line = fp:read()
     fp:close()
 
-    local fields = ngx_re.split(cpu_line, [[\s*]], "jo")
+    local fields = ngx_re.split(cpu_line, [[\s+]], "jo")
+    core.log.warn("/proc/stat line:", cpu_line, " fields:", core.json.delay_encode(fields, true))
 
     local cpu_total = 0
     for i = 2, #fields do
-        cpu_total = cpu_total + fields[i]
+        cpu_total = cpu_total + tonumber(fields[i])
     end
 
     return cpu_total

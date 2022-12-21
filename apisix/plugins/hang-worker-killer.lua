@@ -91,6 +91,7 @@ local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, dura
     local exceed_cpu_limit = 0
     for i = 0, continuous - 1 do
         local cpu_percent, err = cpu.cpu_percent(worker_pid, duration)
+        core.log.info("get cpu percent for worker:", worker_pid, " percent:", cpu_percent)
         if err then
             return false, err
         end
@@ -101,12 +102,17 @@ local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, dura
     end
 
     if exceed_cpu_limit < continuous / 2 then
+        core.log.info("count of workers that exceed cpu limit:",
+            exceed_cpu_limit, " continuous:", continuous)
         return false
     end
 
     for i = 0, continuous - 1 do
-        local qps = worker_qps_counter:get("worker-qps-" .. worker_pid .. "-" .. now_time + i)
-        if qps > min_qps then
+        local key = "worker-qps-" .. worker_pid .. "-" .. now_time + i
+        local qps = worker_qps_counter:get(key)
+        core.log.info("get qps for worker:",
+            worker_pid, " shared dict key:", key, " qps:", qps)
+        if qps and qps > min_qps then
             return false
         end
     end
@@ -132,6 +138,7 @@ local function monitor(premature)
     local continuous = CONTINUOUS
     local min_qps = MIN_QPS
     local max_cpu_percent = MAX_CPU_PERCENT
+    core.log.info("metadata.value for hang-worker-killer:", core.json.encode(metadata.value, true))
     if metadata.value then
         enabled = metadata.value.enabled or enabled
         interval = metadata.value.interval or interval
@@ -140,19 +147,6 @@ local function monitor(premature)
         min_qps = metadata.value.min_qps or min_qps
         max_cpu_percent = metadata.value.max_cpu_percent or max_cpu_percent
     end
-
-    ngx_update_time()
-    local now_time = ngx_time()
-    local worker_map_keys = shared_worker_map:get_keys()
-    core.log.error("worker_map_keys:", core.json.encode(worker_map_keys, true))
-    for _, key in ipairs(worker_map_keys) do
-        local worker_pid = string.sub(key, 12)
-        local qps = worker_qps_counter:get("worker-qps-" .. worker_pid .. "-" .. now_time)
-        core.log.error("worker_pid from key:", worker_pid, " qps:", qps)
-    end
-    local shared_qps = ngx.shared["worker-qps-count"]
-    local qps_keys = shared_qps:get_keys()
-    core.log.error("qps_keys:", core.json.encode(qps_keys, true))
 
 
     if not enabled then
@@ -164,7 +158,7 @@ local function monitor(premature)
     local now_time = ngx_time()
     if not next_time then
         -- first init rotate time
-        next_time = now_time + interval - (now_time % interval)
+        next_time = now_time + interval
         core.log.info("first init monitor time is: ", next_time)
         return
     end
@@ -178,34 +172,17 @@ local function monitor(premature)
     next_time = now_time + interval
 
     local worker_map_keys = shared_worker_map:get_keys()
-    core.log.error("worker_map_keys:", worker_map_keys)
     for _, key in ipairs(worker_map_keys) do
         local worker_pid = string.sub(key, 12)
-        core.log.error("worker_pid from key:", worker_pid)
         local hung, err = check_hang(worker_pid, max_cpu_percent, min_qps, continuous, duration)
+        core.log.info("check worker hang, workder pid:", worker_pid, " hung:", hung, " error:", err)
         if err then
             core.log.error("failed to check worker hang:", err)
         end
 
         if hung then
             core.log.warn("send TERM signal to worker process [", worker_pid, "] for restarting it")
-            local ok, err = signal.kill(worker_pid, "TERM")
-            if not ok then
-                core.log.error("failed to send TERM signal for restarting it: ", err)
-            end
-        end
-    end
-
-    for i = 0, worker_count - 1 do
-        local worker_pid = shared_worker_map:get("worker-pid-" .. i)
-        local hung, err = check_hang(worker_pid, max_cpu_percent, min_qps, continuous, duration)
-        if err then
-            core.log.error("failed to check worker hang:", err)
-        end
-
-        if hung then
-            core.log.warn("send TERM signal to worker process [", worker_pid, "] for restarting it")
-            local ok, err = signal.kill(worker_pid, "TERM")
+            local ok, err = signal.kill(tonumber(worker_pid), "TERM")
             if not ok then
                 core.log.error("failed to send TERM signal for restarting it: ", err)
             end
@@ -215,14 +192,11 @@ end
 
 
 function _M.log()
+    ngx_update_time()
+
     local pid = ngx_worker_pid()
     local now_time = ngx_time()
     worker_qps_counter:incr("worker-qps-" .. pid .. "-" .. now_time)
-
-    local shared_qps = ngx.shared["worker-qps-count"]
-    local qps_keys = shared_qps:get_keys()
-    core.log.error("qps_keys11:", core.json.encode(qps_keys, true), " ccc:", "worker-qps-" .. pid .. "-" .. now_time)
-
 end
 
 
@@ -234,7 +208,6 @@ function _M.init()
     -- ngx.workder.id return nil at some version of openresty
     -- so we aviod to use it
     local worker_pid = ngx_worker_pid()
-    core.log.error(" worker_pid:", worker_pid, "workid: ", ngx.worker.id(), " bool: ", ngx.worker.id() == 0 )
     shared_worker_map:set("worker-pid-" .. worker_pid, worker_pid)
 end
 
