@@ -76,6 +76,7 @@ dependencies = {
     "opentelemetry-lua = 0.1-3",
     "net-url = 0.9-1",
     "xml2lua = 1.5-2",
+    "lua-resty-counter = 0.2.1-1",
 }
 
 build = {

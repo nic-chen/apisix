@@ -47,7 +47,7 @@ luac.out
 t/servroot
 conf/apisix.uid
 conf/nginx.conf
-deps
+deps*
 scgi_temp
 uwsgi_temp
 proxy_temp

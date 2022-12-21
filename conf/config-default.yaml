@@ -265,6 +265,8 @@ nginx_config:                     # config for render the template to generate n
       access-tokens: 1m
       ext-plugin: 1m
       kubernetes: 1m
+      worker-pid-map: 1m
+      worker-qps-count: 1m
 
 etcd:
   host:                           # it's possible to define multiple etcd hosts addresses of the same etcd cluster.
@@ -321,7 +323,8 @@ graphql:
 #ext-plugin:
   #cmd: ["ls", "-l"]
 
-plugins:                          # plugin list (sorted by priority)
+plugins:                           # plugin list (sorted by priority)
+  - hang-worker-killer             # priority: 24000
   - real-ip                        # priority: 23000
   - client-control                 # priority: 22000
   - proxy-control                  # priority: 21990
