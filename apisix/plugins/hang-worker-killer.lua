@@ -91,7 +91,8 @@ local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, dura
     local exceed_cpu_limit = 0
     for i = 0, continuous - 1 do
         local cpu_percent, err = cpu.cpu_percent(worker_pid, duration)
-        core.log.info("get cpu percent for worker:", worker_pid, " percent:", cpu_percent)
+        core.log.info("get cpu percent for worker:",
+            worker_pid, " percent:", cpu_percent, " error:", err)
         if err then
             return false, err
         end
@@ -110,9 +111,10 @@ local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, dura
     for i = 0, continuous - 1 do
         local key = "worker-qps-" .. worker_pid .. "-" .. now_time + i
         local qps = worker_qps_counter:get(key)
-        core.log.info("get qps for worker:",
-            worker_pid, " shared dict key:", key, " qps:", qps)
+        core.log.info("get QPS for worker:",
+            worker_pid, " shared dict key:", key, " QPS:", qps)
         if qps and qps > min_qps then
+            core.log.info("determined non-hang process, because QPS reached the set min_qps")
             return false
         end
     end
@@ -175,7 +177,7 @@ local function monitor(premature)
     for _, key in ipairs(worker_map_keys) do
         local worker_pid = string.sub(key, 12)
         local hung, err = check_hang(worker_pid, max_cpu_percent, min_qps, continuous, duration)
-        core.log.info("check worker hang, workder pid:", worker_pid, " hung:", hung, " error:", err)
+        core.log.info("check worker hang, worker pid:", worker_pid, " hung:", hung, " error:", err)
         if err then
             core.log.error("failed to check worker hang:", err)
         end
@@ -205,7 +207,7 @@ function _M.init()
     timers.register_timer("plugin#" .. plugin_name, monitor, true)
 
     -- store pid of the worker to shared dict
-    -- ngx.workder.id return nil at some version of openresty
+    -- ngx.worker.id return nil at some version of openresty
     -- so we aviod to use it
     local worker_pid = ngx_worker_pid()
     shared_worker_map:set("worker-pid-" .. worker_pid, worker_pid)

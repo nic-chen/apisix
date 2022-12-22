@@ -1,6 +1,7 @@
 local ngx_time        = ngx.time
 local ngx_update_time = ngx.update_time
 local core            = require("apisix.core")
+local sleep           = require("apisix.core.utils").sleep
 
 
 local schema = {
@@ -37,22 +38,24 @@ end
 
 function _M.access(conf, ctx)
     local uri_args = core.request.get_uri_args(ctx) or {}
-    local burn_sec = uri_args["burn_sec"] and tonumber(uri_args["burn_sec"]) or 1
+    local burn_sec = uri_args["burn_sec"] and tonumber(uri_args["burn_sec"]) or 0
 
-    ngx_update_time()
-    local start_time = ngx_time()
-    local sum = 0
-    while true do
+    if burn_sec > 0 then
         ngx_update_time()
-        local now_time = ngx_time()
-        if now_time - start_time > burn_sec then
-            break
-        end
+        local start_time = ngx_time()
+        while true do
+            ngx_update_time()
+            local now_time = ngx_time()
+            if now_time - start_time > burn_sec then
+                break
+            end
 
-        sum = sum + cal()
+            cal()
+            sleep(0.01)
+        end
     end
 
-    return 200, sum
+    return 200, "hello world\n"
 end
 
 
