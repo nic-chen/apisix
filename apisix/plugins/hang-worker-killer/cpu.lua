@@ -1,11 +1,15 @@
+local require  = require
 local io_open  = io.open
-local ngx_re   = require "ngx.re"
+local ngx_re   = require("ngx.re")
 local str_find = string.find
+local str_sub  = string.sub
 local tonumber = tonumber
-local core             = require("apisix.core")
 
 
-local _M = {version = 0.1}
+local _M = {
+    version = 0.1,
+    proc_path = "/proc"
+}
 
 
 local function split_proc_stat(content)
@@ -15,9 +19,9 @@ local function split_proc_stat(content)
         return nil, "invalid proc stat file content"
     end
 
-    local name = string.sub(content, name_start + 1, name_end)
-    local pid = string.sub(content, 0, name_start - 1)
-    local rest_content = string.sub(content, name_end)
+    local name = str_sub(content, name_start + 1, name_end - 1)
+    local pid = str_sub(content, 0, name_start - 1)
+    local rest_content = str_sub(content, name_end)
 	local rest_fields = ngx_re.split(rest_content, [[\s+]], "jo")
 
     local res = {}
@@ -29,10 +33,11 @@ local function split_proc_stat(content)
 
     return res
 end
+_M.split_proc_stat = split_proc_stat
 
 
-local function worker_cpu_times(pid)
-    local filepath = "/proc/" .. pid .. "/stat"
+function _M.worker_cpu_times(pid)
+    local filepath = _M.proc_path .. "/" .. pid .. "/stat"
     local fp, err = io_open(filepath, "r")
     if not fp then
         return 0, "failed to open file: " .. filepath .. ", error info:" .. err
@@ -57,10 +62,11 @@ local function worker_cpu_times(pid)
 end
 
 
-local function cpu_times()
-    local fp, err = io_open("/proc/stat","r")
+function _M.cpu_times()
+    local filepath = _M.proc_path .. "/stat"
+    local fp, err = io_open(filepath,"r")
     if not fp then
-        return 0, "failed to open file: /proc/stat, error info: " .. err
+        return 0, "failed to open file: " .. filepath .. ", error info: " .. err
     end
 
     -- skip the total cpu line
@@ -69,7 +75,6 @@ local function cpu_times()
     fp:close()
 
     local fields = ngx_re.split(cpu_line, [[\s+]], "jo")
-    core.log.warn("/proc/stat line:", cpu_line, " fields:", core.json.delay_encode(fields, true))
 
     local cpu_total = 0
     for i = 2, #fields do
@@ -81,24 +86,24 @@ end
 
 
 function _M.cpu_percent(worker_pid, duration)
-    local worker_cpu_total, err = worker_cpu_times(worker_pid)
+    local worker_cpu_total, err = _M.worker_cpu_times(worker_pid)
     if not worker_cpu_total then
         return 0, "failed to get cpu times for worker " .. worker_pid .. " " .. err
     end
 
-    local cpu_total, err = cpu_times()
+    local cpu_total, err = _M.cpu_times()
     if not cpu_total then
         return 0, "failed to get cpu times" .. err
     end
 
     ngx.sleep(duration)
 
-    local worker_cpu_total2, err = worker_cpu_times(worker_pid)
+    local worker_cpu_total2, err = _M.worker_cpu_times(worker_pid)
     if not worker_cpu_total2 then
         return 0, "failed to get cpu times for worker " .. worker_pid .. " " .. err
     end
 
-    local cpu_total2, err = cpu_times()
+    local cpu_total2, err = _M.cpu_times()
     if not cpu_total2 then
         return 0, "failed to get cpu times" .. err
     end

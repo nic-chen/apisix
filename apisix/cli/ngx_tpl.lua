@@ -252,8 +252,7 @@ http {
     {% end %}
 
     {% if enabled_plugins["hang-worker-killer"] then %}
-    lua_shared_dict worker-qps-count {* http.lua_shared_dict["worker-qps-count"] *};
-    lua_shared_dict worker-pid-map {* http.lua_shared_dict["worker-pid-map"] *};
+    lua_shared_dict plugin-hang-worker-killer-qps {* http.lua_shared_dict["plugin-hang-worker-killer-qps"] or "1m" *};
     {% end %}
 
     {% if enabled_plugins["proxy-cache"] then %}

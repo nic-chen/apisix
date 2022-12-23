@@ -1,41 +1,38 @@
-local ngx              = ngx
-local ngx_time         = ngx.time
-local ngx_worker_pid   = ngx.worker.pid
-local ngx_update_time  = ngx.update_time
-local counter          = require("resty.counter")
-local signal           = require("resty.signal")
-local core             = require("apisix.core")
-local timers           = require("apisix.timers")
-local plugin           = require("apisix.plugin")
-local cpu              = require("apisix.plugins.hang-worker-killer.cpu")
+local ngx             = ngx
+local require         = require
+local ngx_time        = ngx.time
+local ngx_worker_pid  = ngx.worker.pid
+local ngx_update_time = ngx.update_time
+local counter         = require("resty.counter")
+local signal          = require("resty.signal")
+local core            = require("apisix.core")
+local plugin          = require("apisix.plugin")
+local timers          = require("apisix.timers")
+local cpu             = require("apisix.plugins.hang-worker-killer.cpu")
 
 
 local plugin_name     = "hang-worker-killer"
-local INTERVAL        = 60         -- The monitor interval (unit: second)
 local SYNC_INTERVAL   = 0.1        -- The interval for sync local state to shared dict
+local INTERVAL        = 60          -- The monitor interval (unit: second)
 local MIN_QPS         = 100        -- At least how many QPS is possible to achieve such CPU usage
-local MAX_CPU_PERCENT = 0.80       -- The max CPU usage percent on which the worker should be killed
-local CONTINUOUS      = 10         -- How many consecutive checks on CPU for each monitor
+local MAX_CPU_PERCENT = 0.8        -- The max CPU usage percent on which the worker should be killed
+local CONTINUOUS      = 10          -- How many consecutive checks on CPU for each monitor
 local DURATION        = 1          -- The duration to count CPU usage
 local ENABLED         = false
 local next_time                    -- The next time to monitor(unix timestamp)
 
-
-local shared_worker_map = ngx.shared["worker-pid-map"]
-local shared_worker_qps_count = ngx.shared["worker-qps-count"]
+local shared_worker_map = ngx.shared["plugin-hang-worker-killer-pids"]
+local shared_worker_qps_count = ngx.shared["plugin-hang-worker-killer-qps"]
 if not shared_worker_map or not shared_worker_qps_count then
     error("failed to get ngx.shared dict when load plugin " .. plugin_name)
 end
 
-
-local worker_qps_counter = counter.new("worker-qps-count", SYNC_INTERVAL)
-
+local worker_qps_counter = counter.new("plugin-hang-worker-killer-qps", SYNC_INTERVAL)
 
 local schema = {
     type = "object",
     properties = {},
 }
-
 
 local metadata_schema = {
     type = "object",
@@ -52,10 +49,6 @@ local metadata_schema = {
             type = "integer",
             default = 10
         },
-        duration = {
-            type = "integer",
-            default = 1
-        },
         max_cpu_percent = {
             type = "number",
             default = 0.8
@@ -66,7 +59,6 @@ local metadata_schema = {
         }
     }
 }
-
 
 local _M = {
     version = 0.1,
@@ -87,8 +79,12 @@ end
 
 
 local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, duration)
-    local now_time = ngx_time()
     local exceed_cpu_limit = 0
+    local requests_key = "worker-qps-" .. worker_pid
+    local reach_min_qps = false
+
+    local current_requests = worker_qps_counter:get(requests_key) or 0
+
     for i = 0, continuous - 1 do
         local cpu_percent, err = cpu.cpu_percent(worker_pid, duration)
         core.log.info("get cpu percent for worker:",
@@ -100,23 +96,31 @@ local function check_hang(worker_pid, max_cpu_percent, min_qps, continuous, dura
         if cpu_percent >= max_cpu_percent then
             exceed_cpu_limit = exceed_cpu_limit + 1
         end
+
+        local temp_requests = worker_qps_counter:get(requests_key) or 0
+        -- once the requests collected is greater than the min qps
+        -- it can be considered that the min requirement has been met
+        local diff = temp_requests - current_requests
+        core.log.info("counting diff, temp_requests:", temp_requests, " current_requests:", current_requests)
+        if diff > min_qps then
+            core.log.info("reached min QPS, diff:", diff, " min_qps:", min_qps)
+            reach_min_qps = true
+        end
+
+        current_requests = temp_requests
     end
 
+    if reach_min_qps then
+        core.log.info("determined non-hang process, because QPS reached the set min_qps")
+        return false
+    end
+
+    -- consider a worker CPU usage limit exceeded only if
+    -- more than half of the continuous checks exceed the limit
     if exceed_cpu_limit < continuous / 2 then
         core.log.info("count of workers that exceed cpu limit:",
             exceed_cpu_limit, " continuous:", continuous)
         return false
-    end
-
-    for i = 0, continuous - 1 do
-        local key = "worker-qps-" .. worker_pid .. "-" .. now_time + i
-        local qps = worker_qps_counter:get(key)
-        core.log.info("get QPS for worker:",
-            worker_pid, " shared dict key:", key, " QPS:", qps)
-        if qps and qps > min_qps then
-            core.log.info("determined non-hang process, because QPS reached the set min_qps")
-            return false
-        end
     end
 
     return true
@@ -144,30 +148,29 @@ local function monitor(premature)
     if metadata.value then
         enabled = metadata.value.enabled or enabled
         interval = metadata.value.interval or interval
-        duration = metadata.value.duration or duration
         continuous = metadata.value.continuous or continuous
         min_qps = metadata.value.min_qps or min_qps
         max_cpu_percent = metadata.value.max_cpu_percent or max_cpu_percent
     end
 
-
     if not enabled then
-        core.log.info("monitor disabled")
+        core.log.info("hang worker monitor disabled")
         return
     end
 
     ngx_update_time()
     local now_time = ngx_time()
     if not next_time then
-        -- first init rotate time
+        -- first init monitor time
         next_time = now_time + interval
         core.log.info("first init monitor time is: ", next_time)
         return
     end
 
     if now_time < next_time then
-        -- did not reach the next monitor time
-        core.log.info("monitor time: ", next_time, " now time: ", now_time)
+        -- not reach the next monitor time
+        core.log.info("not reach the next monitor time, monitor time: ",
+            next_time, " now time: ", now_time)
         return
     end
 
@@ -194,11 +197,8 @@ end
 
 
 function _M.log()
-    ngx_update_time()
-
     local pid = ngx_worker_pid()
-    local now_time = ngx_time()
-    worker_qps_counter:incr("worker-qps-" .. pid .. "-" .. now_time)
+    worker_qps_counter:incr("worker-qps-" .. pid)
 end
 
 
@@ -207,8 +207,8 @@ function _M.init()
     timers.register_timer("plugin#" .. plugin_name, monitor, true)
 
     -- store pid of the worker to shared dict
-    -- ngx.worker.id return nil at some version of openresty
-    -- so we aviod to use it
+    -- ngx.worker.pids is undefined and ngx.worker.id return nil at current versions of openresty
+    -- so we aviod to use them
     local worker_pid = ngx_worker_pid()
     shared_worker_map:set("worker-pid-" .. worker_pid, worker_pid)
 end
@@ -216,6 +216,7 @@ end
 
 function _M.destroy()
     timers.unregister_timer("plugin#" .. plugin_name, true)
+
     -- remove pid of the worker from shared dict
     local worker_pid = ngx_worker_pid()
     shared_worker_map:delete("worker-pid-" .. worker_pid)

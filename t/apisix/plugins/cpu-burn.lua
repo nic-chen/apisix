@@ -51,7 +51,6 @@ function _M.access(conf, ctx)
             end
 
             cal()
-            sleep(0.01)
         end
     end
 
