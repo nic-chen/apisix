@@ -3,6 +3,7 @@ local require         = require
 local ngx_time        = ngx.time
 local ngx_worker_pid  = ngx.worker.pid
 local ngx_update_time = ngx.update_time
+local process         = require("ngx.process")
 local counter         = require("resty.counter")
 local signal          = require("resty.signal")
 local core            = require("apisix.core")
@@ -202,9 +203,19 @@ function _M.log()
 end
 
 
+local function is_privileged()
+    return process.type() == "privileged agent"
+end
+
+
 function _M.init()
     -- register timer on privileged process
     timers.register_timer("plugin#" .. plugin_name, monitor, true)
+
+    -- don't monitor privileged process itself
+    if is_privileged() then
+        return
+    end
 
     -- store pid of the worker to shared dict
     -- ngx.worker.pids is undefined and ngx.worker.id return nil at current versions of openresty
@@ -216,6 +227,11 @@ end
 
 function _M.destroy()
     timers.unregister_timer("plugin#" .. plugin_name, true)
+
+    -- don't monitor privileged process itself
+    if is_privileged() then
+        return
+    end
 
     -- remove pid of the worker from shared dict
     local worker_pid = ngx_worker_pid()

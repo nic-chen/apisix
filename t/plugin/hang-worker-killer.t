@@ -335,7 +335,7 @@ send TERM signal to worker process
                     "interval": 1,
                     "continuous": 2,
                     "max_cpu_percent": 0,
-                    "min_qps": 10
+                    "min_qps": 5
                 }]]
                 )
             if code >= 300 then
@@ -352,55 +352,34 @@ passed
 
 
 === TEST 14: hit the route, trigger high CPU usage but not kill the worker
+--- timeout: 5s
 --- config
-location /access_hello {
-    content_by_lua_block {
-        local port = ngx.var.server_port
-        local httpc = require "resty.http"
-        local hc = httpc:new()
+    location /t {
+        content_by_lua_block {
+            local t = require("lib.test_admin").test
 
-        local res, err = hc:request_uri('http://127.0.0.1:' .. port .. '/hello', {
-            keepalive = false
-        })
-        if res then
-            ngx.exit(res.status)
-        end
+            ngx.update_time()
+            local stop_time = ngx.time() + 4
+
+            while true do
+                ngx.update_time()
+                local now_time = ngx.time()
+                if now_time > stop_time then
+                    break
+                end
+
+                t('/hello')
+                ngx.sleep(0.02)
+            end
+
+            ngx.say("done")
+        }
     }
-}
-
-location /test_concurrency {
-    content_by_lua_block {
-        local reqs = {}
-        for i = 1, 11 do
-            reqs[i] = { "/access_hello" }
-        end
-        local resps = { ngx.location.capture_multi(reqs) }
-        for i, resp in ipairs(resps) do
-            ngx.say(resp.status)
-        end
-
-        -- wait for monitor
-        ngx.sleep(4)
-    }
-}
---- timeout: 5
---- request
-GET /test_concurrency
 --- response_body
-200
-200
-200
-200
-200
-200
-200
-200
-200
-200
-200
+done
 --- error_log
 determined non-hang process, because QPS reached the set min_qps
---- LAST
+
 
 
 === TEST 15: update plugin metadata to disabled monitor
