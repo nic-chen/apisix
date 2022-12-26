@@ -148,7 +148,7 @@ passed
         content_by_lua_block {
             local cpu = require("apisix.plugins.hang-worker-killer.cpu")
             local t = require("lib.test_admin")
-            local data = t.read_file("t/testdata/cpu/first/4842/stat")
+            local data = t.read_file("t/enterprise/testdata/proc/4842/stat")
             local arr = cpu.split_proc_stat(data)
 
             ngx.say("pid:" .. arr[1] .. " name:" .. arr[2] .. " utime:" .. arr[14] .. " stime:" .. arr[15])
@@ -157,7 +157,7 @@ passed
 --- request
 GET /t
 --- response_body
-pid:4842  name:openresty utime:0 stime:11
+pid:4842 name:openresty utime:11 stime:11
 
 
 
@@ -166,19 +166,20 @@ pid:4842  name:openresty utime:0 stime:11
     location /t {
         content_by_lua_block {
             local cpu = require("apisix.plugins.hang-worker-killer.cpu")
-            cpu.proc_path = "t/testdata/cpu/first"
-            local t, err = cpu.worker_cpu_times("4842")
+            cpu.proc_path = "t/enterprise/testdata/proc"
+            local t, processor, err  = cpu.worker_cpu_times("4842")
             if err then
                 ngx.say("failed: ", err)
             end
-
             ngx.say(t)
+            ngx.say(processor)
         }
     }
 --- request
 GET /t
 --- response_body
-11
+22
+3
 
 
 
@@ -187,18 +188,30 @@ GET /t
     location /t {
         content_by_lua_block {
             local cpu = require("apisix.plugins.hang-worker-killer.cpu")
-            cpu.proc_path = "t/testdata/cpu/first"
-            local t, err = cpu.cpu_times()
+            cpu.proc_path = "t/enterprise/testdata/proc"
+            local t0, err = cpu.cpu_times(0)
             if err then
                 ngx.say("failed: ", err)
             end
-
-            ngx.say(t)
+            ngx.say(t0)
+            local t3, err = cpu.cpu_times(3)
+            if err then
+                ngx.say("failed: ", err)
+            end
+            ngx.say(t3)
+            -- fallback to cpu0
+            local tf, err = cpu.cpu_times(10)
+            if err then
+                ngx.say("failed: ", err)
+            end
+            ngx.say(tf)
         }
     }
 --- request
 GET /t
 --- response_body
+83861044
+79200420
 83861044
 
 
@@ -369,6 +382,7 @@ passed
                 end
 
                 t('/hello')
+
                 ngx.sleep(0.02)
             end
 
