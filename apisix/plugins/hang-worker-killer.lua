@@ -23,7 +23,7 @@ local ENABLED         = false      -- The monitor is enabled or not
 
 -- runtime vars
 local SYNC_INTERVAL   = 0.1        -- The interval for sync local state to shared dict
-local DURATION        = 1          -- The duration to count CPU usage
+local DURATION        = 0.05       -- The duration to count CPU usage
 local next_time                    -- The next time to monitor(unix timestamp)
 
 local shared_worker_map = ngx.shared["plugin-hang-worker-killer-pids"]
@@ -158,6 +158,10 @@ local function monitor(premature)
         min_qps = metadata.value.min_qps or min_qps
         max_cpu_percent = metadata.value.max_cpu_percent or max_cpu_percent
     end
+
+    -- Since the DURATION is not a second, we need to do a conversion to 
+    -- facilitate user understanding during configuration
+    min_qps = min_qps / (1 / DURATION)
 
     if not enabled then
         core.log.info("hang worker monitor disabled")

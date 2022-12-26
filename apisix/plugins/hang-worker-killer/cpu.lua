@@ -98,24 +98,24 @@ end
 
 
 function _M.cpu_percent(worker_pid, duration)
-    local worker_cpu_total, err = _M.worker_cpu_times(worker_pid)
+    local worker_cpu_total, processor, err = _M.worker_cpu_times(worker_pid)
     if not worker_cpu_total then
         return 0, "failed to get cpu times for worker " .. worker_pid .. " " .. err
     end
 
-    local cpu_total, err = _M.cpu_times()
+    local cpu_total, err = _M.cpu_times(processor)
     if not cpu_total then
         return 0, "failed to get cpu times" .. err
     end
 
     ngx.sleep(duration)
 
-    local worker_cpu_total2, err = _M.worker_cpu_times(worker_pid)
+    local worker_cpu_total2, processor2, err = _M.worker_cpu_times(worker_pid)
     if not worker_cpu_total2 then
         return 0, "failed to get cpu times for worker " .. worker_pid .. " " .. err
     end
 
-    local cpu_total2, err = _M.cpu_times()
+    local cpu_total2, err = _M.cpu_times(processor2)
     if not cpu_total2 then
         return 0, "failed to get cpu times" .. err
     end
