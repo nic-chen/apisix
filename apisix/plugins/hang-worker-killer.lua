@@ -13,13 +13,19 @@ local cpu             = require("apisix.plugins.hang-worker-killer.cpu")
 
 
 local plugin_name     = "hang-worker-killer"
-local SYNC_INTERVAL   = 0.1        -- The interval for sync local state to shared dict
-local INTERVAL        = 60          -- The monitor interval (unit: second)
+
+-- configurations
+-- default values just for test. TODO: upate to 60 by default
+local INTERVAL        = 2          -- The monitor interval (unit: second)
 local MIN_QPS         = 100        -- At least how many QPS is possible to achieve such CPU usage
 local MAX_CPU_PERCENT = 0.8        -- The max CPU usage percent on which the worker should be killed
-local CONTINUOUS      = 10          -- How many consecutive checks on CPU for each monitor
-local DURATION        = 1          -- The duration to count CPU usage
-local ENABLED         = false
+-- default values just for test. TODO: upate to 10 by default
+local CONTINUOUS      = 2          -- How many consecutive checks on CPU for each monitor
+local ENABLED         = false      -- The monitor is enabled or not
+
+-- runtime vars
+local SYNC_INTERVAL   = 0.1        -- The interval for sync local state to shared dict
+local DURATION        = 0.05       -- The duration to count CPU usage(in seconds)
 local next_time                    -- The next time to monitor(unix timestamp)
 
 local shared_worker_map = ngx.shared["plugin-hang-worker-killer-pids"]

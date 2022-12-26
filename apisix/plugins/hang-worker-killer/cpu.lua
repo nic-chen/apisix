@@ -20,8 +20,8 @@ local function split_proc_stat(content)
     end
 
     local name = str_sub(content, name_start + 1, name_end - 1)
-    local pid = str_sub(content, 0, name_start - 1)
-    local rest_content = str_sub(content, name_end)
+    local pid = str_sub(content, 0, name_start - 2)
+    local rest_content = str_sub(content, name_end + 2)
 	local rest_fields = ngx_re.split(rest_content, [[\s+]], "jo")
 
     local res = {}
@@ -40,7 +40,7 @@ function _M.worker_cpu_times(pid)
     local filepath = _M.proc_path .. "/" .. pid .. "/stat"
     local fp, err = io_open(filepath, "r")
     if not fp then
-        return 0, "failed to open file: " .. filepath .. ", error info:" .. err
+        return 0, 0, "failed to open file: " .. filepath .. ", error info:" .. err
     end
 
     local content = fp:read("*all")
@@ -48,33 +48,45 @@ function _M.worker_cpu_times(pid)
 
     local res, err = split_proc_stat(content)
     if err then
-        return 0, err
+        return 0, 0, err
     end
 
-    if #res < 15 then
-        return 0, "invalid proc stat file(" .. filepath .. ") content"
+    if #res < 39 then
+        return 0, 0, "invalid proc stat file(" .. filepath .. ") content"
     end
 
     local utime = tonumber(res[14])
     local stime = tonumber(res[15])
+    local processor = tonumber(res[39])
 
-    return utime + stime
+    return utime + stime, processor
 end
 
 
-function _M.cpu_times()
+function _M.cpu_times(processor)
     local filepath = _M.proc_path .. "/stat"
     local fp, err = io_open(filepath,"r")
     if not fp then
         return 0, "failed to open file: " .. filepath .. ", error info: " .. err
     end
 
-    -- skip the total cpu line
-    local _ = fp:read()
+    -- skip lines to the processor line
+    for i = 0, processor do
+        local _ = fp:read()
+    end
+
     local cpu_line = fp:read()
-    fp:close()
 
     local fields = ngx_re.split(cpu_line, [[\s+]], "jo")
+    if fields[1] ~= "cpu" .. processor then
+        -- fallback to cpu0
+        fp:seek("set", 0)
+        -- skip the first line
+        local _ = fp:read()
+        cpu_line = fp:read()
+        fields = ngx_re.split(cpu_line, [[\s+]], "jo")
+    end
+    fp:close()
 
     local cpu_total = 0
     for i = 2, #fields do
