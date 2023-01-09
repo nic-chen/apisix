@@ -55,6 +55,7 @@ local _M = {
     metadata_schema = metadata_schema
 }
 
+
 function _M.check_schema(conf, schema_type)
     if schema_type == core.schema.TYPE_METADATA then
         return core.schema.check(metadata_schema, conf)
@@ -71,24 +72,89 @@ function _M.check_schema(conf, schema_type)
     return false, err
 end
 
-local casbin_enforcer
 
-local function new_enforcer_if_need(conf)
-    if conf.model_path and conf.policy_path then
-        local model_path = conf.model_path
-        local policy_path = conf.policy_path
-        if not conf.casbin_enforcer then
-            conf.casbin_enforcer = casbin:new(model_path, policy_path)
+local function get_plugin_ctx_key(ctx)
+    return ctx.conf_type .. "#" .. ctx.conf_id
+end
+
+
+local ctx_casbin_enforcers = {}
+
+local function get_ctx_casbin_enforcer(ctx)
+    local key = get_plugin_ctx_key(ctx)
+    return ctx_casbin_enforcers[key]
+end
+
+
+local function new_ctx_casbin_enforcer(ctx, conf)
+    local model_path  = conf.model_path
+    local policy_path = conf.policy_path
+    local model       = conf.model
+    local policy      = conf.policy
+    local conf_ver    = conf.version
+    local key         = get_plugin_ctx_key(ctx)
+    local enforcer    = ctx_casbin_enforcers[key]
+
+    -- if enforcer is nil, it means that the enforcer is not created yet.
+    if enforcer == nil then
+        if model_path and policy_path then
+            enforcer = casbin:new(model_path, policy_path)
+            ctx_casbin_enforcers[key] = enforcer
+
+            return true
         end
-        return true
+
+        if model and policy then
+            enforcer = casbin:newEnforcerFromText(model, policy)
+            enforcer.conf_ver = conf_ver
+            ctx_casbin_enforcers[key] = enforcer
+
+            return true
+        end
+
+        return false
     end
 
-    if conf.model and conf.policy then
-        local model = conf.model
-        local policy = conf.policy
-        if not conf.casbin_enforcer then
-            conf.casbin_enforcer = casbin:newEnforcerFromText(model, policy)
+    -- update enfocer when conf.version changed
+    if conf.conf_ver ~= enforcer.conf_ver then
+        if model_path and policy_path then
+            ngx.timer.at(0, function(premature)
+                if premature then
+                    return
+                end
+
+                enforcer = casbin:new(model_path, policy_path)
+                enforcer.conf_ver = conf_ver
+                ctx_casbin_enforcers[key] = enforcer
+            end)
+
+            return true
         end
+
+        if model and policy then
+            ngx.timer.at(0, function(premature)
+                if premature then
+                    return
+                end
+
+                enforcer = casbin:newEnforcerFromText(model, policy)
+                enforcer.conf_ver = conf_ver
+                ctx_casbin_enforcers[key] = enforcer
+            end)
+
+            return true
+        end
+    end
+
+    return false
+end
+
+
+local casbin_enforcer
+
+local function new_enforcer_if_need(ctx, conf)
+    local created = new_ctx_casbin_enforcer(ctx, conf)
+    if created then
         return true
     end
 
@@ -101,16 +167,29 @@ local function new_enforcer_if_need(conf)
     if not casbin_enforcer or casbin_enforcer.modifiedIndex ~= modifiedIndex then
         local model = metadata.value.model
         local policy = metadata.value.policy
-        casbin_enforcer = casbin:newEnforcerFromText(model, policy)
-        casbin_enforcer.modifiedIndex = modifiedIndex
+
+        if casbin_enforcer == nil then
+            casbin_enforcer = casbin:newEnforcerFromText(model, policy)
+            casbin_enforcer.modifiedIndex = modifiedIndex
+        else
+            ngx.timer.at(0, function(premature)
+                if premature then
+                    return
+                end
+
+                conf.casbin_enforcer = casbin:newEnforcerFromText(model, policy)
+                casbin_enforcer.modifiedIndex = modifiedIndex
+            end)
+        end
     end
+
     return true
 end
 
 
 function _M.rewrite(conf, ctx)
     -- creates an enforcer when request sent for the first time
-    local ok, err = new_enforcer_if_need(conf)
+    local ok, err = new_enforcer_if_need(ctx, conf)
     if not ok then
         core.log.error(err)
         return 503
@@ -119,9 +198,10 @@ function _M.rewrite(conf, ctx)
     local path = ctx.var.uri
     local method = ctx.var.method
     local username = get_headers()[conf.username] or "anonymous"
+    local ctx_casbin_enforcer = get_ctx_casbin_enforcer(ctx)
 
-    if conf.casbin_enforcer then
-        if not conf.casbin_enforcer:enforce(username, path, method) then
+    if ctx_casbin_enforcer then
+        if not ctx_casbin_enforcer:enforce(username, path, method) then
             return 403, {message = "Access Denied"}
         end
     else
