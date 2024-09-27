@@ -17,29 +17,56 @@
 local core = require("apisix.core")
 local plugin = require("apisix.plugin")
 local expr = require("resty.expr.v1")
-local ngx  = ngx
+local content_decode = require("apisix.utils.content-decode")
+local ngx = ngx
 local pairs = pairs
 local ngx_now = ngx.now
+local ngx_header = ngx.header
 local os_date = os.date
 local str_byte = string.byte
+local str_sub  = string.sub
 local math_floor = math.floor
 local ngx_update_time = ngx.update_time
 local req_get_body_data = ngx.req.get_body_data
 local is_http = ngx.config.subsystem == "http"
+local req_get_body_file = ngx.req.get_body_file
+local MAX_REQ_BODY      = 524288      -- 512 KiB
+local MAX_RESP_BODY     = 524288      -- 512 KiB
+local io                = io
 
 local lru_log_format = core.lrucache.new({
     ttl = 300, count = 512
 })
 
 local _M = {}
-_M.metadata_schema_log_format = {
-    type = "object",
-    default = {
-        ["host"] = "$host",
-        ["@timestamp"] = "$time_iso8601",
-        ["client_ip"] = "$remote_addr",
-    },
-}
+
+
+local function get_request_body(max_bytes)
+    local req_body = req_get_body_data()
+    if req_body then
+        if max_bytes and #req_body >= max_bytes then
+            req_body = str_sub(req_body, 1, max_bytes)
+        end
+        return req_body
+    end
+
+    local file_name = req_get_body_file()
+    if not file_name then
+        return nil
+    end
+
+    core.log.info("attempt to read body from file: ", file_name)
+
+    local f, err = io.open(file_name, 'r')
+    if not f then
+        return nil, "fail to open file " .. err
+    end
+
+    req_body = f:read(max_bytes)
+    f:close()
+
+    return req_body
+end
 
 
 local function gen_log_format(format)
@@ -56,66 +83,12 @@ local function gen_log_format(format)
 end
 
 
-local function get_request_body(conf, ctx)
-    local res = {}
-
-    if conf.include_req_body then
-
-        local log_request_body = true
-
-        if conf.include_req_body_expr then
-
-            if not conf.request_expr then
-                local request_expr, err = expr.new(conf.include_req_body_expr)
-                if not request_expr then
-                    core.log.error('generate request expr err ' .. err)
-                    return res
-                end
-                conf.request_expr = request_expr
-            end
-
-            local result = conf.request_expr:eval(ctx.var)
-
-            if not result then
-                log_request_body = false
-            end
-        end
-
-        if log_request_body then
-            local body = req_get_body_data()
-            if body then
-                res.request_body = body
-                return res
-            else
-                local body_file = ngx.req.get_body_file()
-                if body_file then
-                    res.request_body_file = body_file
-                    return res
-                end
-            end
-        end
-    end
-
-    return res
-end
-
-
-local function get_custom_format_log(ctx, format, conf)
+local function get_custom_format_log(ctx, format)
     local log_format = lru_log_format(format or "", nil, gen_log_format, format)
     local entry = core.table.new(0, core.table.nkeys(log_format))
     for k, var_attr in pairs(log_format) do
         if var_attr[1] then
-            if var_attr[2] == "response_body" then
-                entry[k] = ctx.resp_body
-            elseif var_attr[2] == "request_body" then
-                local request_data = get_request_body(conf, ctx)
-                entry[k] = request_data.request_body
-            elseif var_attr[2] == "request_body_file" then
-                local request_data = get_request_body(conf, ctx)
-                entry[k] = request_data.request_body_file
-            else
-                entry[k] = ctx.var[var_attr[2]]
-            end
+            entry[k] = ctx.var[var_attr[2]]
         else
             entry[k] = var_attr[2]
         end
@@ -218,9 +191,38 @@ local function get_full_log(ngx, conf)
         log.response.body = ctx.resp_body
     end
 
-    local request_data = get_request_body(conf, ctx)
-    log.request.body = request_data.request_body
-    log.request.body_file = request_data.request_body_file
+    if conf.include_req_body then
+
+        local log_request_body = true
+
+        if conf.include_req_body_expr then
+
+            if not conf.request_expr then
+                local request_expr, err = expr.new(conf.include_req_body_expr)
+                if not request_expr then
+                    core.log.error('generate request expr err ' .. err)
+                    return log
+                end
+                conf.request_expr = request_expr
+            end
+
+            local result = conf.request_expr:eval(ctx.var)
+
+            if not result then
+                log_request_body = false
+            end
+        end
+
+        if log_request_body then
+            local max_req_body_bytes = conf.max_req_body_bytes or MAX_REQ_BODY
+            local body, err = get_request_body(max_req_body_bytes)
+            if err then
+                core.log.error("fail to get request body: ", err)
+                return
+            end
+            log.request.body = body
+        end
+    end
 
     return log
 end
@@ -234,7 +236,27 @@ function _M.inject_get_full_log(f)
 end
 
 
+local function is_match(match, ctx)
+    local match_result
+    for _, m in pairs(match) do
+        local expr, _ = expr.new(m)
+        match_result = expr:eval(ctx.var)
+        if match_result then
+            break
+        end
+    end
+
+    return match_result
+end
+
+
 function _M.get_log_entry(plugin_name, conf, ctx)
+    -- If the "match" configuration is set and the matching conditions are not met,
+    -- then do not log the message.
+    if conf.match and not is_match(conf.match, ctx) then
+        return
+    end
+
     local metadata = plugin.plugin_metadata(plugin_name)
     core.log.info("metadata: ", core.json.delay_encode(metadata))
 
@@ -246,7 +268,7 @@ function _M.get_log_entry(plugin_name, conf, ctx)
 
     if conf.log_format or has_meta_log_format then
         customized = true
-        entry = get_custom_format_log(ctx, conf.log_format or metadata.value.log_format, conf)
+        entry = get_custom_format_log(ctx, conf.log_format or metadata.value.log_format)
     else
         if is_http then
             entry = get_full_log(ngx, conf)
@@ -261,20 +283,21 @@ end
 
 
 function _M.get_req_original(ctx, conf)
-    local headers = {
+    local data = {
         ctx.var.request, "\r\n"
     }
     for k, v in pairs(ngx.req.get_headers()) do
-        core.table.insert_tail(headers, k, ": ", v, "\r\n")
+        core.table.insert_tail(data, k, ": ", v, "\r\n")
     end
-    -- core.log.error("headers: ", core.table.concat(headers, ""))
-    core.table.insert(headers, "\r\n")
+    core.table.insert(data, "\r\n")
 
     if conf.include_req_body then
-        core.table.insert(headers, ctx.var.request_body)
+        local max_req_body_bytes = conf.max_req_body_bytes or MAX_REQ_BODY
+        local req_body = get_request_body(max_req_body_bytes)
+        core.table.insert(data, req_body)
     end
 
-    return core.table.concat(headers, "")
+    return core.table.concat(data, "")
 end
 
 
@@ -319,11 +342,38 @@ function _M.collect_body(conf, ctx)
         end
 
         if log_response_body then
-            local final_body = core.response.hold_body_chunk(ctx, true)
+            local max_resp_body_bytes = conf.max_resp_body_bytes or MAX_RESP_BODY
+
+            if ctx._resp_body_bytes and ctx._resp_body_bytes >= max_resp_body_bytes then
+                return
+            end
+            local final_body = core.response.hold_body_chunk(ctx, true, max_resp_body_bytes)
             if not final_body then
                 return
             end
-            ctx.resp_body = final_body
+
+            local response_encoding = ngx_header["Content-Encoding"]
+            if not response_encoding then
+                ctx.resp_body = final_body
+                return
+            end
+
+            local decoder = content_decode.dispatch_decoder(response_encoding)
+            if not decoder then
+                core.log.warn("unsupported compression encoding type: ",
+                              response_encoding)
+                ctx.resp_body = final_body
+                return
+            end
+
+            local decoded_body, err = decoder(final_body)
+            if err ~= nil then
+                core.log.warn("try decode compressed data err: ", err)
+                ctx.resp_body = final_body
+                return
+            end
+
+            ctx.resp_body = decoded_body
         end
     end
 end
