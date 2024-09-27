@@ -554,7 +554,9 @@ function _M.delete(key)
         return nil, err
     end
 
-    res.headers["X-Etcd-Index"] = res.body.header.revision
+    if res.body.header then
+        res.headers["X-Etcd-Index"] = res.body.header.revision
+    end
 
     if not res.body.deleted then
         return not_found(res), nil

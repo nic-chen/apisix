@@ -55,12 +55,67 @@ local function gen_log_format(format)
     return log_format
 end
 
-local function get_custom_format_log(ctx, format)
+
+local function get_request_body(conf, ctx)
+    local res = {}
+
+    if conf.include_req_body then
+
+        local log_request_body = true
+
+        if conf.include_req_body_expr then
+
+            if not conf.request_expr then
+                local request_expr, err = expr.new(conf.include_req_body_expr)
+                if not request_expr then
+                    core.log.error('generate request expr err ' .. err)
+                    return res
+                end
+                conf.request_expr = request_expr
+            end
+
+            local result = conf.request_expr:eval(ctx.var)
+
+            if not result then
+                log_request_body = false
+            end
+        end
+
+        if log_request_body then
+            local body = req_get_body_data()
+            if body then
+                res.request_body = body
+                return res
+            else
+                local body_file = ngx.req.get_body_file()
+                if body_file then
+                    res.request_body_file = body_file
+                    return res
+                end
+            end
+        end
+    end
+
+    return res
+end
+
+
+local function get_custom_format_log(ctx, format, conf)
     local log_format = lru_log_format(format or "", nil, gen_log_format, format)
     local entry = core.table.new(0, core.table.nkeys(log_format))
     for k, var_attr in pairs(log_format) do
         if var_attr[1] then
-            entry[k] = ctx.var[var_attr[2]]
+            if var_attr[2] == "response_body" then
+                entry[k] = ctx.resp_body
+            elseif var_attr[2] == "request_body" then
+                local request_data = get_request_body(conf, ctx)
+                entry[k] = request_data.request_body
+            elseif var_attr[2] == "request_body_file" then
+                local request_data = get_request_body(conf, ctx)
+                entry[k] = request_data.request_body_file
+            else
+                entry[k] = ctx.var[var_attr[2]]
+            end
         else
             entry[k] = var_attr[2]
         end
@@ -163,40 +218,9 @@ local function get_full_log(ngx, conf)
         log.response.body = ctx.resp_body
     end
 
-    if conf.include_req_body then
-
-        local log_request_body = true
-
-        if conf.include_req_body_expr then
-
-            if not conf.request_expr then
-                local request_expr, err = expr.new(conf.include_req_body_expr)
-                if not request_expr then
-                    core.log.error('generate request expr err ' .. err)
-                    return log
-                end
-                conf.request_expr = request_expr
-            end
-
-            local result = conf.request_expr:eval(ctx.var)
-
-            if not result then
-                log_request_body = false
-            end
-        end
-
-        if log_request_body then
-            local body = req_get_body_data()
-            if body then
-                log.request.body = body
-            else
-                local body_file = ngx.req.get_body_file()
-                if body_file then
-                    log.request.body_file = body_file
-                end
-            end
-        end
-    end
+    local request_data = get_request_body(conf, ctx)
+    log.request.body = request_data.request_body
+    log.request.body_file = request_data.request_body_file
 
     return log
 end
@@ -222,7 +246,7 @@ function _M.get_log_entry(plugin_name, conf, ctx)
 
     if conf.log_format or has_meta_log_format then
         customized = true
-        entry = get_custom_format_log(ctx, conf.log_format or metadata.value.log_format)
+        entry = get_custom_format_log(ctx, conf.log_format or metadata.value.log_format, conf)
     else
         if is_http then
             entry = get_full_log(ngx, conf)

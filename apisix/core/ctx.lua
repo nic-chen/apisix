@@ -217,6 +217,11 @@ do
         route_name = true,
         service_id = true,
         service_name = true,
+        resp_response_size = function(ctx)
+            return (ngx.ctx.api_ctx.var.upstream_response_length ~= '0' and ngx.ctx.api_ctx.var.upstream_response_length)
+                    or (ngx.ctx.api_ctx.var.body_bytes_sent ~= '0' and ngx.ctx.api_ctx.var.body_bytes_sent)
+                    or ngx.ctx.api_ctx.var.upstream_bytes_received
+        end,
     }
 
     local mt = {
