@@ -27,7 +27,7 @@ jobs:
         platform:
           - ubuntu-20.04
         os_name:
-          - linux_openresty
+          - linux_openresty_1_19
         test_dir:
           - t/plugin/kafka*
 
