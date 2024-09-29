@@ -53,7 +53,7 @@ dependencies = {
     "nginx-lua-prometheus = 0.20220527",
     "jsonschema = 0.9.8",
     "lua-resty-ipmatcher = 0.6.1",
-    "lua-resty-kafka = 0.20-0",
+    "lua-resty-kafka = 0.23-0",
     "lua-resty-logger-socket = 2.0.1-0",
     "skywalking-nginx-lua = 0.6.0",
     "base64 = 1.5-2",
@@ -78,7 +78,9 @@ dependencies = {
     "xml2lua = 1.5-2",
     "nanoid = 0.1-1",
     "lua-resty-mediador = 0.1.2-1",
-    "lua-resty-ldap = 0.1.0-0"
+    "lua-resty-ldap = 0.1.0-0",
+    "lua-ffi-zlib = 0.6-0",
+    "brotli-ffi = 0.3-1"
 }
 
 build = {
