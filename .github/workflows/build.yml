@@ -31,12 +31,15 @@ jobs:
         test_dir:
           - t/plugin/[a-k]*
           - t/plugin/[l-z]*
+          - t/admin t/cli t/config-center-yaml t/control t/core t/debug t/deployment t/discovery t/error_page t/misc
+          - t/node t/pubsub t/router t/script t/secret t/stream-node t/utils t/wasm t/xds-library t/xrpc
 
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 90
     env:
       SERVER_NAME: ${{ matrix.os_name }}
       OPENRESTY_VERSION: default
+      abt_branch: apisix-base/1.21.4.2.2
 
     steps:
       - name: Check out code
@@ -161,7 +164,7 @@ jobs:
 
       - name: Linux Install
         run: |
-          sudo --preserve-env=OPENRESTY_VERSION \
+          sudo --preserve-env=OPENRESTY_VERSION,abt_branch \
           ./ci/${{ matrix.os_name }}_runner.sh do_install
 
       - name: Linux Script
